@@ -1,9 +1,8 @@
+import axios from "axios";
 import { useEffect, useState } from "react";
 import { Tab, Tabs, TabList, TabPanel } from "react-tabs";
-import axios from "axios";
+import { FaStar, FaRegStar } from "react-icons/fa"; // Ícones para favoritos
 import "react-tabs/style/react-tabs.css";
-
-const ITEMS_PER_PAGE = 50; // Quantidade de eventos por página
 
 interface Event {
   id: string;
@@ -13,150 +12,199 @@ interface Event {
   startDate: number;
 }
 
+const CACHE_EXPIRATION_TIME = 60 * 60 * 1000;
+
 export default function App() {
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const [events, setEvents] = useState<Event[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [favorites, setFavorites] = useState<Event[]>([]);
 
   useEffect(() => {
-    fetchEvents(page);
-  }, [page]);
-
-  const fetchEvents = async (page: number) => {
-    setLoading(true);
-    try {
-      const response = await axios.post(
-        "https://typesense.ccxp.com.br/multi_search?x-typesense-api-key=87UE3dBtOyjJpNU4TJIo4KOMiiasac93",
-        {
-          searches: [
-            {
-              query_by: "title, content, types, local, presenters, guests, day",
-              query_by_weights: "100, 50, 1, 1, 90, 80, 1",
-              sort_by: "_text_match:desc,localOrder:asc,startDate:asc",
-              collection: "programacoes",
-              q: "*",
-              facet_by: "day,local,types",
-              filter_by:
-                "locale:pt-br && endDate:>1733208420 && day:=[`07/12 (sábado)`,`08/12 (domingo)`]",
-              per_page: ITEMS_PER_PAGE,
-              page,
-            },
-          ],
-        }
-      );
-
-      const fetchedEvents = response.data.results[0].hits.map(
-        (hit: any) => ({
-          id: hit.document.id,
-          ...hit.document,
-        })
-      );
-
-      setEvents((prevEvents) => [...prevEvents, ...fetchedEvents]);
-      setHasMore(fetchedEvents.length === ITEMS_PER_PAGE);
-    } catch (error) {
-      console.error("Erro ao buscar dados:", error);
-    } finally {
-      setLoading(false);
+    const storedFavorites = localStorage.getItem("favorites");
+    if (storedFavorites) {
+      setFavorites(JSON.parse(storedFavorites));
     }
+  }, []);
+
+  const saveFavorites = (favorites: Event[]) => {
+    localStorage.setItem("favorites", JSON.stringify(favorites));
+    setFavorites(favorites);
   };
 
-  const loadMore = () => {
-    if (hasMore) setPage((prevPage) => prevPage + 1);
+  const toggleFavorite = (event: Event) => {
+    const isFavorite = favorites.some((fav) => fav.id === event.id);
+    const updatedFavorites = isFavorite
+      ? favorites.filter((fav) => fav.id !== event.id)
+      : [...favorites, event];
+
+    saveFavorites(updatedFavorites);
   };
 
-  // Organizar eventos por dia
-  const eventsByDay = events.reduce<Record<string, Event[]>>((acc, event) => {
-    if (!acc[event.day]) acc[event.day] = [];
-    acc[event.day].push(event);
-    return acc;
-  }, {});
+  const isFavorite = (event: Event) =>
+    favorites.some((fav) => fav.id === event.id);
 
-  const tabColors = [
-    "bg-red-400", // Tom coral
-    "bg-yellow-400", // Amarelo vibrante
-    "bg-teal-400", // Azul esverdeado
-    "bg-blue-400", // Azul claro
-    "bg-purple-400", // Roxo pastel
-  ];
+  useEffect(() => {
+    const fetchEvents = async () => {
+      const cachedData = localStorage.getItem("events");
+      const cachedTimestamp = localStorage.getItem("eventsTimestamp");
+
+      if (
+        cachedData &&
+        cachedTimestamp &&
+        Date.now() - parseInt(cachedTimestamp, 10) < CACHE_EXPIRATION_TIME
+      ) {
+        setEvents(JSON.parse(cachedData));
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await axios.post(
+          "https://typesense.ccxp.com.br/multi_search?x-typesense-api-key=87UE3dBtOyjJpNU4TJIo4KOMiiasac93",
+          {
+            searches: [
+              {
+                query_by: "title, content, types, local, presenters, guests, day",
+                query_by_weights: "100, 50, 1, 1, 90, 80, 1",
+                sort_by: "_text_match:desc,localOrder:asc,startDate:asc",
+                collection: "programacoes",
+                q: "*",
+                facet_by: "day,local,types",
+                filter_by:
+                  "locale:pt-br && endDate:>1733208420 && day:=[`07/12 (sábado)`,`08/12 (domingo)`]",
+                per_page: 250,
+              },
+            ],
+          }
+        );
+
+        const fetchedEvents = response.data.results[0].hits.map(
+          (hit: any) => ({
+            id: hit.document.id,
+            ...hit.document,
+          })
+        );
+
+        localStorage.setItem("events", JSON.stringify(fetchedEvents));
+        localStorage.setItem("eventsTimestamp", Date.now().toString());
+        setEvents(fetchedEvents);
+      } catch (error) {
+        console.error("Erro ao buscar dados:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
+
+  const eventsByDay = events
+    ? events.reduce<Record<string, Event[]>>((acc, event) => {
+        if (!acc[event.day]) acc[event.day] = [];
+        acc[event.day].push(event);
+        return acc;
+      }, {})
+    : {};
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-6 text-gray-700">Eventos</h1>
-      <Tabs className="w-full max-w-6xl">
-        <TabList className="flex justify-center gap-4 my-4">
-          {["Todos", ...Object.keys(eventsByDay)].map((tab, index) => (
-            <Tab
-              key={tab}
-              className={`px-6 py-3 rounded-lg font-semibold text-white shadow-lg cursor-pointer transform transition-transform duration-200 hover:scale-105 ${tabColors[index % tabColors.length]}`}
-              selectedClassName="border-4 border-white scale-110"
-            >
-              {tab}
-            </Tab>
-          ))}
-        </TabList>
-
-        {/* Painel de Todos os Eventos */}
-        <TabPanel>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-            {events.map((event) => (
-              <div
-                key={event.id}
-                className="bg-white shadow-md rounded-lg p-4 hover:bg-gray-50"
-              >
-                <h2 className="text-lg font-semibold text-gray-800">
-                  {event.title}
-                </h2>
-                <p className="text-gray-600">
-                  Horário:{" "}
-                  {new Date(event.startDate * 1000).toLocaleTimeString("pt-BR", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
+      {loading ? (
+        <h1 className="text-2xl text-gray-700">Carregando eventos...</h1>
+      ) : (
+        <Tabs>
+          <TabList>
+            <Tab>Favoritos</Tab>
+            {Object.keys(eventsByDay).map((day) => (
+              <Tab classname="bg-rose-200" key={day}>{day}</Tab>
             ))}
-          </div>
-          {loading && <p>Carregando...</p>}
-          {hasMore && !loading && (
-            <button
-              onClick={loadMore}
-              className="bg-blue-500 text-white px-4 py-2 rounded mt-4"
-            >
-              Ver Mais
-            </button>
-          )}
-        </TabPanel>
+          </TabList>
 
-        {/* Painéis por Dia */}
-        {Object.keys(eventsByDay).map((day, index) => (
-          <TabPanel key={day}>
+          <TabPanel>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-              {eventsByDay[day].map((event) => (
-                <div
-                  key={event.id}
-                  className="bg-white shadow-md rounded-lg p-4 hover:bg-gray-50"
-                >
-                  <h2 className="text-lg font-semibold text-gray-800">
-                    {event.title}
-                  </h2>
-                  <p className="text-gray-600">
-                    Horário:{" "}
-                    {new Date(event.startDate * 1000).toLocaleTimeString(
-                      "pt-BR",
-                      {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }
-                    )}
-                  </p>
-                </div>
-              ))}
+              {favorites.length === 0 ? (
+                <p className="text-gray-600">Nenhum evento favorito.</p>
+              ) : (
+                favorites.map((event) => (
+                  <div
+                    key={event.id}
+                    className="bg-yellow-100 shadow-md rounded-lg p-4"
+                  >
+                    <h2 className="text-lg font-semibold text-gray-800">
+                      {event.title}
+                    </h2>
+                    <p className="text-gray-600">
+                      Horário:{" "}
+                      {new Date(event.startDate * 1000).toLocaleTimeString(
+                        "pt-BR",
+                        { hour: "2-digit", minute: "2-digit" }
+                      )}
+                    </p>
+                    <button
+                      onClick={() => toggleFavorite(event)}
+                      className="text-yellow-500 text-2xl mt-2"
+                    >
+                      <FaStar />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </TabPanel>
-        ))}
-      </Tabs>
+
+          {Object.keys(eventsByDay).map((day) => (
+            <TabPanel key={day}>
+              <Tabs>
+                <TabList>
+                  {Array.from(
+                    new Set(eventsByDay[day].map((event) => event.local))
+                  ).map((local) => (
+                    <Tab key={local}>{local}</Tab>
+                  ))}
+                </TabList>
+                {Array.from(
+                  new Set(eventsByDay[day].map((event) => event.local))
+                ).map((local) => (
+                  <TabPanel key={local}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                      {eventsByDay[day]
+                        .filter((event) => event.local === local)
+                        .map((event) => (
+                          <div
+                            key={event.id}
+                            className="bg-white shadow-md rounded-lg p-4 hover:bg-gray-50"
+                          >
+                            <h2 className="text-lg font-semibold text-gray-800">
+                              {event.title}
+                            </h2>
+                            <p className="text-gray-600">
+                              Horário:{" "}
+                              {new Date(
+                                event.startDate * 1000
+                              ).toLocaleTimeString("pt-BR", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                            <button
+                              onClick={() => toggleFavorite(event)}
+                              className={`text-2xl mt-2 ${
+                                isFavorite(event)
+                                  ? "text-yellow-500"
+                                  : "text-gray-400"
+                              }`}
+                            >
+                              {isFavorite(event) ? <FaStar /> : <FaRegStar />}
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </TabPanel>
+                ))}
+              </Tabs>
+            </TabPanel>
+          ))}
+        </Tabs>
+      )}
     </div>
   );
-                            }
+    }
