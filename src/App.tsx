@@ -114,7 +114,7 @@ export default function App() {
         <Tabs>
           <TabList>
   <Tab>Favoritos</Tab>
-  {Object.keys(eventsByDay).map((day, index) => (
+  {Object.keys(eventsByDay).map((day) => (
     <Tab key={day} >{day}</Tab>
   ))}
 </TabList>
