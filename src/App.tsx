@@ -107,17 +107,20 @@ export default function App() {
     : {};
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center">
+    <div className="min-h-screen bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 flex flex-col items-center justify-center p-4">
       {loading ? (
         <h1 className="text-2xl text-gray-700">Carregando eventos...</h1>
       ) : (
         <Tabs>
-          <TabList>
-  <Tab>Favoritos</Tab>
-  {Object.keys(eventsByDay).map((day) => (
-    <Tab key={day} >{day}</Tab>
-  ))}
-</TabList>
+          <TabList className="flex flex-wrap justify-center gap-4 p-4">
+            <Tab>Favoritos</Tab>
+            {Object.keys(eventsByDay).map((day, index) => (
+              <Tab className={`cursor-pointer py-2 px-4 rounded-md text-white transition ${
+                index % 2 === 0 ? "bg-blue-500" : "bg-green-500"
+              } hover:scale-105`}
+              selectedClassName="border-2 border-white" key={day}>{day}</Tab>
+            ))}
+          </TabList>
 
           <TabPanel>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
@@ -158,7 +161,7 @@ export default function App() {
                   {Array.from(
                     new Set(eventsByDay[day].map((event) => event.local))
                   ).map((local) => (
-                    <Tab key={local}>{local}</Tab>
+                    <Tab  key={local}>{local}</Tab>
                   ))}
                 </TabList>
                 {Array.from(
@@ -207,4 +210,4 @@ export default function App() {
       )}
     </div>
   );
-    }
+}
