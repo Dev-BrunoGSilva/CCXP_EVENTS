@@ -1,24 +1,3 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-.tab-favoritos {
-  background-color: #ffd700; /* Amarelo */
-}
-
-.tab-dia-0 {
-  background-color: #ffadad; /* Rosa claro */
-}
-
-.tab-dia-1 {
-  background-color: #9ad0ec; /* Azul claro */
-}
-
-.tab-dia-2 {
-  background-color: #ffdac1; /* Pêssego */
-}
-
-/* Ajuste o hover e foco */
-.react-tabs__tab--selected {
-  border-bottom: 2px solid #000;
-}
