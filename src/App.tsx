@@ -142,6 +142,10 @@ export default function App() {
                         { hour: "2-digit", minute: "2-digit" }
                       )}
                     </p>
+                    <p className="text-gray-600">
+                      Dia:{" "}
+                      {event.day}
+                    </p>
                     <button
                       onClick={() => toggleFavorite(event)}
                       className="text-yellow-500 text-2xl mt-2"
