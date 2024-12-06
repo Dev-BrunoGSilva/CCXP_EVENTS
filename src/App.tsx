@@ -1,217 +1,159 @@
-import axios from "axios";
-import { useEffect, useState } from "react";
-import { Tab, Tabs, TabList, TabPanel } from "react-tabs";
-import { FaStar, FaRegStar } from "react-icons/fa"; // Ícones para favoritos
-import "react-tabs/style/react-tabs.css";
+import React, { useState } from 'react';
 
-interface Event {
-  id: string;
-  title: string;
-  day: string;
-  local: string;
-  startDate: number;
+interface ParsedData {
+  headers: string[];
+  rows: string[][];
 }
-
-const CACHE_EXPIRATION_TIME = 60 * 60 * 1000;
 
 export default function App() {
-  const [events, setEvents] = useState<Event[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [favorites, setFavorites] = useState<Event[]>([]);
+  const [selectedTab, setSelectedTab] = useState<string>('eventos');
+  const [csvData, setCsvData] = useState<ParsedData | null>(null);
+  const [docxData, setDocxData] = useState<string | null>(null);
 
-  useEffect(() => {
-    const storedFavorites = localStorage.getItem("favorites");
-    if (storedFavorites) {
-      setFavorites(JSON.parse(storedFavorites));
+  // Função para mudar a aba ativa
+  const changeTab = (tab: string) => setSelectedTab(tab);
+
+  // Função para ler arquivo CSV
+  const handleCsvFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type === 'text/csv') {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const parsed = parseCsv(result);
+        setCsvData(parsed);
+      };
+      reader.readAsText(file);
     }
-  }, []);
-
-  const saveFavorites = (favorites: Event[]) => {
-    localStorage.setItem("favorites", JSON.stringify(favorites));
-    setFavorites(favorites);
   };
 
-  const toggleFavorite = (event: Event) => {
-    const isFavorite = favorites.some((fav) => fav.id === event.id);
-    const updatedFavorites = isFavorite
-      ? favorites.filter((fav) => fav.id !== event.id)
-      : [...favorites, event];
-
-    saveFavorites(updatedFavorites);
+  // Função para processar e parsear CSV
+  const parseCsv = (data: string): ParsedData => {
+    const rows = data.split('\n').map(row => row.split(','));
+    const headers = rows.shift() || [];
+    return { headers, rows };
   };
 
-  const isFavorite = (event: Event) =>
-    favorites.some((fav) => fav.id === event.id);
+  // Função para ler arquivo DOCX (apenas texto simples neste exemplo)
+  const handleDocxFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const docxText = extractTextFromDocx(result);
+        setDocxData(docxText);
+      };
+      reader.readAsBinaryString(file);
+    }
+  };
 
-  useEffect(() => {
-    const fetchEvents = async () => {
-      const cachedData = localStorage.getItem("events");
-      const cachedTimestamp = localStorage.getItem("eventsTimestamp");
-
-      if (
-        cachedData &&
-        cachedTimestamp &&
-        Date.now() - parseInt(cachedTimestamp, 10) < CACHE_EXPIRATION_TIME
-      ) {
-        setEvents(JSON.parse(cachedData));
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const response = await axios.post(
-          "https://typesense.ccxp.com.br/multi_search?x-typesense-api-key=87UE3dBtOyjJpNU4TJIo4KOMiiasac93",
-          {
-            searches: [
-              {
-                query_by: "title, content, types, local, presenters, guests, day",
-                query_by_weights: "100, 50, 1, 1, 90, 80, 1",
-                sort_by: "_text_match:desc,localOrder:asc,startDate:asc",
-                collection: "programacoes",
-                q: "*",
-                facet_by: "day,local,types",
-                filter_by:
-                  "locale:pt-br && endDate:>1733208420 && day:=[`07/12 (sábado)`,`08/12 (domingo)`]",
-                per_page: 250,
-              },
-            ],
-          }
-        );
-
-        const fetchedEvents = response.data.results[0].hits.map(
-          (hit: any) => ({
-            id: hit.document.id,
-            ...hit.document,
-          })
-        );
-
-        localStorage.setItem("events", JSON.stringify(fetchedEvents));
-        localStorage.setItem("eventsTimestamp", Date.now().toString());
-        setEvents(fetchedEvents);
-      } catch (error) {
-        console.error("Erro ao buscar dados:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEvents();
-  }, []);
-
-  const eventsByDay = events
-    ? events.reduce<Record<string, Event[]>>((acc, event) => {
-        if (!acc[event.day]) acc[event.day] = [];
-        acc[event.day].push(event);
-        return acc;
-      }, {})
-    : {};
+  // Função simplificada para extrair texto de um DOCX (este é um exemplo simplificado)
+  const extractTextFromDocx = (data: string): string => {
+    return "Texto extraído do arquivo DOCX (aqui deveria vir o conteúdo real)";
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 flex items-center justify-center p-4">
-      {loading ? (
-        <h1 className="text-2xl text-gray-700">Carregando eventos...</h1>
-      ) : (
-        <Tabs>
-          <TabList className="flex flex-wrap justify-center gap-4 p-4">
-            <Tab>Favoritos</Tab>
-            {Object.keys(eventsByDay).map((day, index) => (
-              <Tab className={`cursor-pointer py-2 px-4 rounded-md text-white transition ${
-                index % 2 === 0 ? "bg-blue-500" : "bg-green-500"
-              } hover:scale-105`}
-              selectedClassName="border-2 border-white" key={day}>{day}</Tab>
-            ))}
-          </TabList>
+    <div>
+      <div className="tabs">
+        <button onClick={() => changeTab('eventos')}>Eventos</button>
+        <button onClick={() => changeTab('importar')}>Importar Arquivos</button>
+      </div>
 
-          <TabPanel>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-              {favorites.length === 0 ? (
-                <p className="text-gray-600">Nenhum evento favorito.</p>
-              ) : (
-                favorites.map((event) => (
-                  <div
-                    key={event.id}
-                    className="bg-yellow-100 shadow-md rounded-lg p-4"
-                  >
-                    <h2 className="text-lg font-semibold text-gray-800">
-                      {event.title}
-                    </h2>
-                    <p className="text-gray-600">
-                      Horário:{" "}
-                      {new Date(event.startDate * 1000).toLocaleTimeString(
-                        "pt-BR",
-                        { hour: "2-digit", minute: "2-digit" }
-                      )}
-                    </p>
-                    <p className="text-gray-600">
-                      Dia:{" "}
-                      {event.day}
-                    </p>
-                    <button
-                      onClick={() => toggleFavorite(event)}
-                      className="text-yellow-500 text-2xl mt-2"
-                    >
-                      <FaStar />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </TabPanel>
-
-          {Object.keys(eventsByDay).map((day) => (
-            <TabPanel key={day}>
-              <Tabs>
-                <TabList>
-                  {Array.from(
-                    new Set(eventsByDay[day].map((event) => event.local))
-                  ).map((local) => (
-                    <Tab  key={local}>{local}</Tab>
-                  ))}
-                </TabList>
-                {Array.from(
-                  new Set(eventsByDay[day].map((event) => event.local))
-                ).map((local) => (
-                  <TabPanel key={local}>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-                      {eventsByDay[day]
-                        .filter((event) => event.local === local)
-                        .map((event) => (
-                          <div
-                            key={event.id}
-                            className="bg-white shadow-md rounded-lg p-4 hover:bg-gray-50"
-                          >
-                            <h2 className="text-lg font-semibold text-gray-800">
-                              {event.title}
-                            </h2>
-                            <p className="text-gray-600">
-                              Horário:{" "}
-                              {new Date(
-                                event.startDate * 1000
-                              ).toLocaleTimeString("pt-BR", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </p>
-                            <button
-                              onClick={() => toggleFavorite(event)}
-                              className={`text-2xl mt-2 ${
-                                isFavorite(event)
-                                  ? "text-yellow-500"
-                                  : "text-gray-400"
-                              }`}
-                            >
-                              {isFavorite(event) ? <FaStar /> : <FaRegStar />}
-                            </button>
-                          </div>
-                        ))}
-                    </div>
-                  </TabPanel>
-                ))}
-              </Tabs>
-            </TabPanel>
-          ))}
-        </Tabs>
+      {selectedTab === 'eventos' && (
+        <div>
+          <h1>Eventos</h1>
+          {/* Exibição de eventos (pode ser uma lista de dados) */}
+          <div className="eventos">
+            <p>Exemplo de exibição de eventos...</p>
+          </div>
+        </div>
       )}
+
+      {selectedTab === 'importar' && (
+        <div>
+          <h1>Importar Arquivos</h1>
+          <div>
+            <h2>Carregar CSV</h2>
+            <input type="file" accept=".csv" onChange={handleCsvFileUpload} />
+            {csvData && (
+              <div className="csv-table">
+                <table>
+                  <thead>
+                    <tr>
+                      {csvData.headers.map((header, index) => (
+                        <th key={index}>{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {csvData.rows.map((row, rowIndex) => (
+                      <tr key={rowIndex}>
+                        {row.map((cell, cellIndex) => (
+                          <td key={cellIndex}>{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h2>Carregar DOCX</h2>
+            <input type="file" accept=".docx" onChange={handleDocxFileUpload} />
+            {docxData && (
+              <div className="docx-content">
+                <p>{docxData}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .tabs {
+          display: flex;
+          gap: 1rem;
+          margin-bottom: 2rem;
+        }
+        .tabs button {
+          padding: 10px 20px;
+          cursor: pointer;
+          background-color: #4CAF50;
+          color: white;
+          border: none;
+          border-radius: 5px;
+        }
+        .tabs button:hover {
+          background-color: #45a049;
+        }
+        .tabs button:focus {
+          outline: none;
+        }
+
+        .csv-table table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        .csv-table th, .csv-table td {
+          padding: 8px 12px;
+          text-align: left;
+          border: 1px solid #ddd;
+        }
+
+        .csv-table th {
+          background-color: #f2f2f2;
+        }
+
+        .docx-content p {
+          background-color: #f9f9f9;
+          padding: 15px;
+          border-radius: 5px;
+        }
+      `}</style>
     </div>
   );
-}
+          }
+              
